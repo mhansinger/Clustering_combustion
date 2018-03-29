@@ -1,0 +1,9 @@
+# git ignore file
+
+*.csv
+
+*.txt
+
+__pycache__
+
+
