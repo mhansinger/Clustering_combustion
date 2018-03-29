@@ -1,6 +1,6 @@
 # git ignore file
 
-*.csv
+#*.csv
 
 *.txt
 
