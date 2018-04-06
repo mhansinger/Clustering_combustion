@@ -104,14 +104,21 @@ def plot_kmeans(n_clusters=10):
     plt.show(block=False)
 
 
-def plot_SOM():
+def plot_SOM(n_clusters=10):
+    from minisom import MiniSom
+    som = MiniSom(n_clusters, 1, X.shape[1], sigma=1.0, learning_rate=0.5)
     #kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(X)
     plt.close('all')
 
     # get the cluster labels
+    som.train_random(X,200)
 
-    #z = data_dd[field].compute()
-    zz = labels.reshape(len(y),len(x))
+    z = []
+    for cnt, xy in enumerate(X):
+        z.append(som.winner(xy)[0])
+
+    zz = np.array(z)
+    zz = zz.reshape(len(y),len(x))
 
     plt.contourf(xx,yy,zz,cmap='jet')
     plt.title('KMeans: %s clusters' % str(n_clusters))
