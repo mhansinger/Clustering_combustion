@@ -1,7 +1,7 @@
-'''
+"""
 This is for an exemplarily PCA/SOM analysis of combustion data
+"""
 
-'''
 
 import pandas as pd
 import numpy as np
@@ -33,6 +33,7 @@ y= y_pos.compute()
 y=y[::50]
 
 xx, yy = np.meshgrid(x,y)
+
 
 def plot_field(field):
     plt.close('all')
