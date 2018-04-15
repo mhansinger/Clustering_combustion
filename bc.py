@@ -12,7 +12,8 @@ import os
 from scipy import interpolate
 from sklearn.cluster import KMeans,DBSCAN
 from sklearn.decomposition import PCA
-
+from data_clustering import data_scaling
+from data_clustering import npc
 # path to case, adjust it
 case = './Data'
 
@@ -127,12 +128,16 @@ def plot_scatter(data_df, field='T',c='k'):
     plt.show(block=False)
 
 
-def plot_kmeans(data_name, data_df, mesh, nc=10, style='jet', drop=['T', 'Chi', 'PV', 'ccx', 'ccy', 'ccz', 'f_Bilger'],
+def plot_kmeans(data_name, data_df, mesh, nc=10, style='jet',
+                drop=['ccx', 'ccy', 'ccz',
+                      'T', 'Chi', 'PV',
+                      'f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute'
+                      ],
                 plane='YZ',
                 learning_rate=0.2, scatter_spec='f_Bilger'):
     X_ = data_df.copy()
-    X_ = X_.drop(drop, axis=1)
-    X = X_.values
+    X = X_.drop(drop, axis=1)
+    # X = X_.values
 
     kmeans = KMeans(n_clusters=nc, random_state=42).fit(X)
 
@@ -146,29 +151,52 @@ def plot_kmeans(data_name, data_df, mesh, nc=10, style='jet', drop=['T', 'Chi', 
     plt.colorbar(ticks=range(nc))
     plt.title('kmeans cluster')
 
+    X['label'] = zz
+    sub=pd.DataFrame()
+    for i in set(zz):
+        data_sub = X[X['label'] == i].drop(['label'], axis=1)
+        # sub.append(npc(data_sub))
+        sub[str(i)]=npc(data_sub)
+
     plt.show(block=False)
+    return sub
 
 
-def plot_DBSCAN(data_name, data_df, mesh, n_clusters=10, style='jet', drop=['T', 'Chi', 'PV', 'ccx', 'ccy', 'ccz', 'f_Bilger'],
-                plane='YZ',
-                learning_rate=0.2, scatter_spec='f_Bilger'):
+def plot_DBSCAN(data_name, data_df, mesh,
+                style='jet',
+                drop=['ccx', 'ccy', 'ccz',
+                      'T', 'Chi', 'PV',
+                      'f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute'
+                      ],
+                EPS=0.2, MINS=200):
     X_ = data_df.copy()
-    X_ = X_.drop(drop, axis=1)
-    X = X_.values
+    X = X_.drop(drop, axis=1)
+    # X = X_.values
 
-    model = DBSCAN(eps=0.1,min_samples=100).fit(X)
+    model = DBSCAN(eps=EPS,min_samples=MINS).fit(X)
 
     # get the cluster labels
     zz = model.labels_
+    n_clusters=len(set(zz))
     cmap = plt.get_cmap('jet', n_clusters)
     plot_field(data_name, mesh, 'dbsan', zz, cmap)
 
     plt.figure()
     plt.scatter(data_df['f_Bilger'], data_df['T'], s=0.5, c=zz, cmap=cmap)
     plt.colorbar(ticks=range(n_clusters))
-    plt.title('kmeans cluster')
+    plt.title('DBSCAN cluster')
+
+    X['label'] = zz
+    sub=pd.DataFrame()
+    for i in set(zz):
+        data_sub = X[X['label'] == i].drop(['label'], axis=1)
+        # sub.append(npc(data_sub))
+        sub[str(i)]=npc(data_sub)
+    # sub[str(i)] = np.asarray(sub)
 
     plt.show(block=False)
+
+    return sub
 
 
 
@@ -179,8 +207,10 @@ if __name__ == '__main__':
     # data_name = 'plane_xy_00.csv'
     data_name = 'plane_yz_50.csv'
     df, mesh = read_data(data_name)
+    dsc = data_scaling(df, 'Auto')
+    # dsc = data_scaling(df, 'PARETO')
     # plot_field(data_name, mesh, df['CH4'])
     cmap='jet'
-    plot_field(data_name, mesh, 'CH4',df['CH4'],cmap)
-    plot_kmeans(data_name, df, mesh,nc=3)
-    plot_DBSCAN(data_name, df, mesh)
+    # plot_field(data_name, mesh, 'OH',df['OH'],cmap)
+    sub_k=plot_kmeans(data_name, dsc, mesh,nc=3)
+    sub_d=plot_DBSCAN(data_name, dsc, mesh,EPS=0.5,MINS=200)
