@@ -11,6 +11,7 @@ import dask.dataframe as dd
 import os
 from scipy import interpolate
 from sklearn.cluster import KMeans,DBSCAN
+import hdbscan
 from sklearn.decomposition import PCA
 from data_clustering import data_scaling
 from data_clustering import npc
@@ -59,7 +60,7 @@ def read_data(data_name = 'plane_xy_00.csv'):
 # plot the field data
 ######################################
 # only the x and y components are relevant
-def plot_field(data_name, mesh, field,zz,cmap):
+def plot_field(data_name, mesh, field, zz,cmap):
 
     plane = data_name.split('_')[1]
     if plane == 'xy':
@@ -109,6 +110,7 @@ def plot_field(data_name, mesh, field,zz,cmap):
         plt.xlabel('x-Axis')
         plt.ylabel('y-Axis')
         plt.colorbar(label=field)
+        # plt.colorbar(label=zz.name)
 
     plt.tight_layout()
 
@@ -128,52 +130,67 @@ def plot_scatter(data_df, field='T',c='k'):
     plt.show(block=False)
 
 
-def plot_kmeans(data_name, data_df, mesh, nc=10, style='jet',
-                drop=['ccx', 'ccy', 'ccz',
+def plot_kmeans(data_name, df, data_df, mesh, nc=10,
+                pca=0,
+                drop=['ccx', 'ccy', 'ccz','label',
                       'T', 'Chi', 'PV',
                       'f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute'
                       ],
-                plane='YZ',
-                learning_rate=0.2, scatter_spec='f_Bilger'):
+                ):
     X_ = data_df.copy()
+    drop = set(X_.columns).intersection(drop)
     X = X_.drop(drop, axis=1)
-    # X = X_.values
+    X_pca = X
+    if pca>0:
+        pca_model = PCA(n_components=pca)
+        X_pca=pca_model.fit_transform(X)
+        print(pca_model.explained_variance_ratio_.sum())
 
-    kmeans = KMeans(n_clusters=nc, random_state=42).fit(X)
+    model = KMeans(n_clusters=nc, random_state=42).fit(X_pca)
 
     # get the cluster labels
-    zz = kmeans.labels_
+    zz = model.labels_
     cmap = plt.get_cmap('jet', nc)
     plot_field(data_name, mesh, 'kmeans', zz, cmap)
 
     plt.figure()
-    plt.scatter(data_df['f_Bilger'], data_df['T'], s=0.5, c=zz, cmap=cmap)
+    # plt.scatter(data_df['f_Bilger'], data_df['T'], s=0.5, c=zz, cmap=cmap)
+    plt.scatter(df['f_Bilger'], df['CO'], s=0.5, c=zz, cmap=cmap)
+    plt.xlim([0, 0.15])
     plt.colorbar(ticks=range(nc))
-    plt.title('kmeans cluster')
+    plt.title('kmeans cluster (pca:'+str(pca)+')')
 
     X['label'] = zz
+    data_df['label'] = zz
     sub=pd.DataFrame()
     for i in set(zz):
         data_sub = X[X['label'] == i].drop(['label'], axis=1)
-        # sub.append(npc(data_sub))
-        sub[str(i)]=npc(data_sub)
+        sub[str(i)]=[npc(data_sub)[0],npc(data_sub)[1],sum(X['label']==i)]
 
     plt.show(block=False)
     return sub
 
 
-def plot_DBSCAN(data_name, data_df, mesh,
-                style='jet',
-                drop=['ccx', 'ccy', 'ccz',
+def plot_DBSCAN(data_name, df,data_df, mesh,
+                pca=0,
+                drop=['ccx', 'ccy', 'ccz','label',
                       'T', 'Chi', 'PV',
                       'f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute'
                       ],
                 EPS=0.2, MINS=200):
-    X_ = data_df.copy()
-    X = X_.drop(drop, axis=1)
-    # X = X_.values
 
-    model = DBSCAN(eps=EPS,min_samples=MINS).fit(X)
+    X_ = data_df.copy()
+    drop = set(X_.columns).intersection(drop)
+    X = X_.drop(drop, axis=1)
+    X_pca = X
+
+    if pca>0:
+        pca_model = PCA(n_components=pca)
+        X_pca=pca_model.fit_transform(X)
+        print(pca_model.explained_variance_ratio_.sum())
+
+    # model = DBSCAN(eps=EPS, min_samples=MINS).fit(X_pca)
+    model = hdbscan.HDBSCAN(min_samples=MINS,gen_min_span_tree=True).fit(X_pca)
 
     # get the cluster labels
     zz = model.labels_
@@ -182,17 +199,22 @@ def plot_DBSCAN(data_name, data_df, mesh,
     plot_field(data_name, mesh, 'dbsan', zz, cmap)
 
     plt.figure()
-    plt.scatter(data_df['f_Bilger'], data_df['T'], s=0.5, c=zz, cmap=cmap)
+    # plt.scatter(data_df['f_Bilger'], data_df['T'], s=0.5, c=zz, cmap=cmap)
+    plt.scatter(df['f_Bilger'], df['CO'], s=0.5, c=zz, cmap=cmap)
+    plt.xlim([0, 0.15])
     plt.colorbar(ticks=range(n_clusters))
-    plt.title('DBSCAN cluster')
+    plt.title('DBSCAN cluster (pca:'+str(pca)+')')
+    plt.show()
 
     X['label'] = zz
+    data_df['label'] = zz
     sub=pd.DataFrame()
     for i in set(zz):
         data_sub = X[X['label'] == i].drop(['label'], axis=1)
-        # sub.append(npc(data_sub))
-        sub[str(i)]=npc(data_sub)
-    # sub[str(i)] = np.asarray(sub)
+        sub[str(i)]=[npc(data_sub)[0],npc(data_sub)[1],sum(X['label']==i)]
+
+    # plt.figure()
+    # plt.scatter(df[X['label'] == 1]['f_Bilger'],df[X['label'] == 1]['T'],s=0.5,cmap='jet')
 
     plt.show(block=False)
 
@@ -206,11 +228,24 @@ if __name__ == '__main__':
 
     # data_name = 'plane_xy_00.csv'
     data_name = 'plane_yz_50.csv'
+
     df, mesh = read_data(data_name)
     dsc = data_scaling(df, 'Auto')
     # dsc = data_scaling(df, 'PARETO')
+    # dsc = df.copy()
     # plot_field(data_name, mesh, df['CH4'])
     cmap='jet'
-    # plot_field(data_name, mesh, 'OH',df['OH'],cmap)
-    sub_k=plot_kmeans(data_name, dsc, mesh,nc=3)
-    sub_d=plot_DBSCAN(data_name, dsc, mesh,EPS=0.5,MINS=200)
+    field=df['Chi']
+    #plot_field(data_name, mesh,field.name, field,cmap)
+
+    # pca=PCA(n_components=5)
+    # X=pca.fit_transform(df)
+    sub_d = plot_DBSCAN(data_name, df, dsc, mesh, EPS=0.5, MINS=400)
+
+    # plt.scatter(dsc['label'], df['Chi'], s=0.5)
+    # plt.show()
+    # # sub_d = plot_DBSCAN(data_name, df, dsc, mesh, pca=6, EPS=0.5, MINS=400)
+    # sub_k = plot_kmeans(data_name, df, dsc, mesh, nc=5)
+    # # sub_k = plot_kmeans(data_name, df, dsc, mesh, pca=7, nc=5,)
+    # plt.scatter(dsc['label'], df['Chi'], s=0.5)
+    # plt.show()
