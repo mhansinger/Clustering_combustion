@@ -9,69 +9,114 @@ import matplotlib.pyplot as plt
 import dask.dataframe as dd
 from os.path import join
 from scipy import interpolate
+from sklearn.manifold import TSNE
 
 # a simple k-Means clustering
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN
 
 # SOM library
 from minisom import MiniSom
 
 
 # path to case, adjust it
-path = '/home/max/HDD2_Data/OF4_Simulations/TNF_KIT/SuperMUC/case-06'
+path = '/home/max/Python/Clustering_combustion/Data'
 
 # relevant columns
 columns = ['ccx', 'ccy', 'ccz', 'C2H2', 'C2H4', 'C2H6', 'CH2CO', 'CH2O', 'CH3', 'CH3OH', 'CH4', 'CO', 'CO2', 'H',
                'H2',
                'H2O', 'H2O2', 'HO2', 'N2', 'O', 'O2', 'OH', 'T', 'f_Bilger', 'Chi']
 
+drop=['T',  'f_Bilger', 'Chi', 'non-eq', 'Chi_norm', 'PV_compute']
+
 class plane_cluster(object):
     def __init__(self,data_name = 'plane_yz_50.csv',path=path, columns = columns):
         # reads in the data as a Dask dataframe
+        self.data_name = data_name
         self.data_all_dd = dd.read_csv(join(path, data_name), assume_missing=True)
 
         self.columns = columns
-        self.data_df = self.data_all_dd[columns].compute()
+
+        self.data_df = self.data_all_dd[self.columns].compute()
 
         self.data_df['non-eq'] = 0
 
-        self.data_df['PV_norm'] = data_df['PV'] / data_df['PV'].max()
+        #self.data_df['PV_norm'] = data_df['PV'] / data_df['PV'].max()
 
-        self.data_df['Chi_norm'] = data_df['Chi'] / data_df['Chi'].max()
+        self.data_df['Chi_norm'] = self.data_df['Chi'] / self.data_df['Chi'].max()
 
         # computed PV
         w_CO = 28.010399999999997
         w_CO2 = 44.009799999999998
         w_H2O = 18.015280000000001
         w_H2 = 2.0158800000000001
-        self.data_df['PV_compute'] = (data_df['CO'] / w_CO + data_df['CO2'] / w_CO2 + data_df['H2O'] / w_H2O) * 1000
-
-        # scale the data!
-
-        self.data_sc = data_df - data_df.mean()
+        self.data_df['PV_compute'] = (self.data_df['CO'] / w_CO + self.data_df['CO2'] / w_CO2 + self.data_df['H2O'] / w_H2O) * 1000
 
         # Different scaling methods: Auto, range, Level, Max, VAST, PARETO
         # see: Parente, Sutherland: Comb. Flame, 160 (2013) 340-350 for more information on scaling
         # we use PARETO scaling here, proven to be the be a good choice: scale data by sqrt of std
 
-        # Pareto
-        self.data_sc = data_sc / np.sqrt(data_sc.std())
+        class geo_mesh:
+            xArray = self.data_df['ccx']
+            yArray = self.data_df['ccy']
+            zArray = self.data_df['ccz']
 
-        self.xArray = self.data_df['ccx']
-        self.yArray = self.data_df['ccy']
-        self.zArray = self.data_df['ccz']
+            xi = np.linspace(np.min(xArray), np.max(xArray), 5075)
+            yi = np.linspace(np.min(yArray), np.max(yArray), 1000)
+            zi = np.linspace(np.min(yArray), np.max(yArray), 1000)
 
-        self.xi = np.linspace(np.min(xArray), np.max(xArray), 5075)
-        self.yi = np.linspace(np.min(yArray), np.max(yArray), 1000)
-        self.zi = np.linspace(np.min(yArray), np.max(yArray), 1000)
+        self.geo = geo_mesh()
 
 
-    def plot_field(self,field='T', cmap='jet', plane='YZ'):
+########################################################
+    def data_scaling(self, case):
+        # here the data is centered around its mean
+        data_centered = self.data_df - self.data_df.mean()
 
-        if plane == 'XY':
+        # Different scaling methods: Auto, range, Level, Max, VAST, PARETO
+        # see: Parente, Sutherland: Comb. Flame, 160 (2013) 340-350 for more information on scaling
+        # we use PARETO scaling here, proven to be the be a good choice: scale data by sqrt of std
+        cases = {
+            'Auto': 'Auto',
+            'Range': 'Range',
+            'Max': 'Max',
+            'VAST': 'VAST',
+            'PARETO': 'PARETO',
+            'Off' : 'Off'
+        }
+
+        if cases.get(case) == 'Auto':
+            data_sc = data_centered / data_centered.std()
+        if cases.get(case) == 'Range':
+            data_sc = data_centered / (data_centered.max() - data_centered.min())
+        if cases.get(case) == 'Max':
+            data_sc = data_centered / data_centered.max()
+        if cases.get(case) == 'VAST':
+            data_sc = data_centered / (data_centered.std() / data_centered.mean())
+        if cases.get(case) == 'PARETO':
+            data_sc = data_centered / np.sqrt(data_centered.std())
+        if cases.get(case) == 'Off':
+            data_sc = self.data_df
+
+        return data_sc
+
+
+########################################################
+    def plot_field(self, field, zz, cmap):
+        '''
+
+        :param field: name of the field to plot (str)
+        :param zz:    matrix of the cluster or field (nparray)
+        :param cmap:  colormap, e.g. 'jet'
+        :return:
+        '''
+
+        mesh = self.geo
+
+        plane = self.data_name.split('_')[1]
+        if plane == 'xy':
 
             # for X-Y plane data
-            XI, YI = np.meshgrid(self.xi, self.yi)
+            XI, YI = np.meshgrid(mesh.xi, mesh.yi)
 
             # these are the regions around the pilot to be masked out
             maskup = (YI > 0.009) & (XI < 0)
@@ -79,8 +124,9 @@ class plane_cluster(object):
             tipp1 = (XI < 0) & (YI < 0.004) & (YI > 0.00375)
             tipp2 = (XI < 0) & (YI > -0.004) & (YI < -0.00375)
 
-            points = np.vstack((self.xArray, self.yArray)).T
-            field_interp = interpolate.griddata(points, self.data_df[field], (XI, YI), 'linear')
+            points = np.vstack((mesh.xArray, mesh.yArray)).T
+            # field_interp = interpolate.griddata(points, data_df[field], (XI, YI), 'linear')
+            field_interp = interpolate.griddata(points, zz, (XI, YI), 'linear')
             field_interp[maskup] = np.nan
             field_interp[maskdown] = np.nan
             field_interp[tipp1] = np.nan
@@ -99,14 +145,16 @@ class plane_cluster(object):
             plt.ylabel('y-Axis')
             plt.colorbar(label=field)
 
-        elif plane == 'YZ':
+        elif plane == 'yz':
             # for Y-Z plane data
-            YI, ZI = np.meshgrid(self.yi, self.zi)
-            points = np.vstack((self.yArray, self.zArray)).T
-            field_interp = interpolate.griddata(points, self.data_df[field], (YI, ZI), 'linear')
+            YI, ZI = np.meshgrid(mesh.yi, mesh.zi)
+            points = np.vstack((mesh.yArray, mesh.zArray)).T
+            # field_interp = interpolate.griddata(points, data_df[field], (YI, ZI), 'linear')
+            # a= data_df[field]
+            field_interp = interpolate.griddata(points, zz, (YI, ZI), 'linear')
 
             plt.figure(figsize=(10, 10))
-
+            # cmap = plt.get_cmap(style, n_clusters)
             plt.imshow(field_interp, cmap=cmap)
 
             plt.title('Field: %s' % field)
@@ -118,6 +166,9 @@ class plane_cluster(object):
 
         plt.show(block=False)
 
+        return cmap
+
+########################################################
     # function to plot the scatter data
     def plot_scatter(self,field='T', c='k'):
         plt.scatter(self.data_df['f_Bilger'], self.data_df[field], s=0.2, c=c, marker='.')
@@ -128,100 +179,95 @@ class plane_cluster(object):
             plt.ylabel('Mass fraction')
         plt.show(block=False)
 
-    # # plots for kmeans clustering
-    # def plot_kmeans(self,n_clusters=10, style='jet', drop=['T', 'Chi', 'PV', 'ccx', 'ccy', 'ccz', 'f_Bilger'], plane='YZ',
-    #                 learning_rate=0.2, scatter_spec='f_Bilger'):
-    #     kmeans = self.KMeans(n_clusters=n_clusters, random_state=42).fit(X)
-    #     plt.close('all')
-    #
-    #     # get the cluster labels
-    #     labels = self.kmeans.labels_
-    #     # z = data_dd[field].compute()
-    #     zz = labels.reshape(len(y), len(x))
-    #
-    #     cmap = plt.get_cmap(style, n_clusters)
-    #     plt.contourf(xx, yy, zz, cmap=cmap)
-    #     plt.title('KMeans: %s clusters' % str(n_clusters))
-    #     plt.xlabel('x axis')
-    #     plt.ylabel('y axis')
-    #     plt.colorbar(ticks=range(n_clusters))
-    #     # plt.clim(-0.5, n_clusters- 0.5)
-    #     plt.show(block=False)
+########################################################
+    # plots for kmeans clustering
+    def plot_kmeans(self,n_clusters=10, style='jet', drop=drop, plane='YZ',
+                    learning_rate=0.2, scatter_spec='T',scale='Off'):
+
+        X_ = self.data_scaling(scale)
+        X_ = X_.drop(drop, axis=1)
+        X = X_.values
+
+        self.kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(X)
+        plt.close('all')
+
+        # get the cluster labels
+        zz = self.kmeans.labels_
+        cmap = plt.get_cmap(style, n_clusters)
+        self.plot_field('kmeans', zz, cmap)
+
+        plt.figure()
+        plt.scatter(self.data_df['f_Bilger'], self.data_df[scatter_spec], s=0.5, c=zz, cmap=cmap)
+        plt.title(scatter_spec)
+        plt.show(block=False)
 
 
+########################################################
     # plots for som clustering
-    def plot_SOM(self,n_clusters=10, style='jet', drop=['T', 'Chi', 'PV', 'ccx', 'ccy', 'ccz', 'f_Bilger'], plane='YZ',
-                 learning_rate=0.2, scatter_spec='f_Bilger'):
+    def plot_SOM(self,n_clusters=10, style='jet', drop=drop, plane='YZ',
+                 learning_rate=0.2, scatter_spec='T',scale='Off'):
 
-        X_ = data_df.copy()
+        X_ =  self.data_scaling(scale)
         X_ = X_.drop(drop, axis=1)
         X = X_.values
 
         self.som = MiniSom(n_clusters, 1, X.shape[1], sigma=1.0, learning_rate=0.5)
 
         # get the cluster labels
-        som.train_random(X, 200)
+        self.som.train_random(X, 200)
 
-        z = []
+        zz = []
         for cnt, xy in enumerate(X):
-            z.append(som.winner(xy)[0])
+            zz.append(self.som.winner(xy)[0])
 
-        self.zz = np.array(z)
 
-        if plane == 'XY':
-            # for X-Y plane data
-            plt.figure()
-            XI, YI = np.meshgrid(self.xi, self.yi)
-
-            # these are the regions around the pilot to be masked out
-            maskup = (YI > 0.009) & (XI < 0)
-            maskdown = (YI < -0.009) & (XI < 0)
-            tipp1 = (XI < 0) & (YI < 0.004) & (YI > 0.00375)
-            tipp2 = (XI < 0) & (YI > -0.004) & (YI < -0.00375)
-
-            points = np.vstack((self.xArray, self.yArray)).T
-            field_interp = interpolate.griddata(points, self.zz, (XI, YI), 'linear')
-            field_interp[maskup] = np.nan
-            field_interp[maskdown] = np.nan
-            field_interp[tipp1] = np.nan
-            field_interp[tipp2] = np.nan
-
-            plt.figure(figsize=(25, 5))
-
-            cmap = plt.get_cmap(style, n_clusters)
-            # plt.contourf(xx,yy,zz,cmap=discrete_cmap(n_clusters, style))
-            plt.imshow(field_interp, cmap=cmap)
-            plt.title('SOM: %s clusters' % str(n_clusters))
-            plt.xlabel('x axis')
-            plt.ylabel('y axis')
-
-            plt.yticks([0, 462.5, 500, 537.5, 1000], ('0.05', 'D/2', '0', '-D/2', '-0.05'))
-            plt.xticks([0, 75, 2 * 75, 6 * 75, 11 * 75, 16 * 75, 21 * 75, 31 * 75],
-                       ('-D', '0', 'D', '5D', '10D', '15D', '20D', '30D'))
-
-        elif plane == 'YZ':
-
-            YI, ZI = np.meshgrid(self.yi, self.zi)
-            points = np.vstack((self.yArray, self.zArray)).T
-            field_interp = interpolate.griddata(points, self.zz, (YI, ZI), 'linear')
-
-            plt.figure(figsize=(10, 10))
-
-            cmap = plt.get_cmap(style, n_clusters)
-            plt.imshow(field_interp, cmap=cmap)
-
-            plt.title('SOM: %s clusters' % str(n_clusters))
-            plt.xlabel('x axis')
-            plt.ylabel('y axis')
-
-        plt.colorbar(ticks=range(n_clusters))
+        cmap = plt.get_cmap(style, n_clusters)
+        self.plot_field('SOM', zz, cmap)
 
         plt.tight_layout()
 
         plt.figure()
         plt.scatter(self.data_df['f_Bilger'], self.data_df[scatter_spec], s=0.5, c=zz, cmap=cmap)
-
+        plt.title(scatter_spec)
         plt.show(block=False)
+
+
+########################################################
+    # plots for DBSCAN
+    def plot_DBSCAN(self, style='jet', drop=drop, plane='YZ',
+                 learning_rate=0.2, scatter_spec='T',scale='Off'):
+
+        X_ =  self.data_scaling(scale)
+        X_ = X_.drop(drop, axis=1)
+        X = X_.values
+
+        self.DBSCAN = DBSCAN(eps=0.3).fit(X)
+
+        zz = self.DBSCAN.labels_
+
+        cmap = plt.get_cmap(style, len(zz))
+        self.plot_field('DBSCAN', zz, cmap)
+
+        plt.tight_layout()
+
+        plt.figure()
+        plt.scatter(self.data_df['f_Bilger'], self.data_df[scatter_spec], s=0.5, c=zz, cmap=cmap)
+        plt.title(scatter_spec)
+        plt.show(block=False)
+
+
+########################################################
+    def TSNE(self,n_components = 4, drop=drop):
+        X_ = self.data_df.copy()
+        X_ = X_.drop(drop, axis=1)
+        X = X_.values
+
+        self.X_embedded = TSNE(n_components=n_components).fit_transform(X)
+
+
+
+
+
 
 
 

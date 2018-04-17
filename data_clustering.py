@@ -153,6 +153,7 @@ def discrete_matshow(data):
     cax = plt.colorbar(mat, ticks=np.arange(np.min(data), np.max(data) + 1))
 
 
+# number of principal components
 def npc(df_scaled):
     n_comp=df_scaled.shape[1]
     pca = PCA(n_components=n_comp)

@@ -129,10 +129,7 @@ def plot_scatter(data_df, field='T',c='k'):
 
 
 def plot_kmeans(data_name, data_df, mesh, nc=10, style='jet',
-                drop=['ccx', 'ccy', 'ccz',
-                      'T', 'Chi', 'PV',
-                      'f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute'
-                      ],
+                drop=['ccx', 'ccy', 'ccz','T', 'Chi', 'PV','f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute'  ],
                 plane='YZ',
                 learning_rate=0.2, scatter_spec='f_Bilger'):
     X_ = data_df.copy()
@@ -162,12 +159,7 @@ def plot_kmeans(data_name, data_df, mesh, nc=10, style='jet',
     return sub
 
 
-def plot_DBSCAN(data_name, data_df, mesh,
-                style='jet',
-                drop=['ccx', 'ccy', 'ccz',
-                      'T', 'Chi', 'PV',
-                      'f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute'
-                      ],
+def plot_DBSCAN(data_name, data_df, mesh,style='jet',drop=['ccx', 'ccy', 'ccz','T', 'Chi', 'PV','f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute'],
                 EPS=0.2, MINS=200):
     X_ = data_df.copy()
     X = X_.drop(drop, axis=1)
@@ -197,6 +189,45 @@ def plot_DBSCAN(data_name, data_df, mesh,
     plt.show(block=False)
 
     return sub
+
+
+# plot SOM
+from minisom import MiniSom
+
+def plot_SOM(data_name, data_df, mesh,style='jet', nc = 5,learning_rate=0.5, sigma =0.5,
+             drop=['ccx', 'ccy', 'ccz','T', 'Chi', 'PV','f_Bilger','non-eq','PV_norm','Chi_norm','PV_compute']):
+
+    X_ = data_df.copy()
+    X = X_.drop(drop, axis=1)
+
+    model = MiniSom(nc, 1, X.shape[1], sigma=sigma, learning_rate=learning_rate)
+
+    # get the cluster labels
+    model.train_random(X, 200)
+
+    z = []
+    for cnt, xy in enumerate(X):
+        z.append(model.winner(xy)[0])
+
+    # plot the clusters
+    cmap = plt.get_cmap('jet', nc)
+    plot_field(data_name, mesh, 'SOM', z, cmap)
+
+    plt.figure()
+    plt.scatter(data_df['f_Bilger'], data_df['T'], s=0.5, c=zz, cmap=cmap)
+    plt.colorbar(ticks=range(n_clusters))
+    plt.title('DBSCAN cluster')
+
+    X['label'] = z
+    sub=pd.DataFrame()
+    for i in set(z):
+        data_sub = X[X['label'] == i].drop(['label'], axis=1)
+        print(data_sub)
+        # sub.append(npc(data_sub))
+        sub[str(i)]=npc(data_sub)
+    # sub[str(i)] = np.asarray(sub)
+
+    plt.show(block=False)
 
 
 
