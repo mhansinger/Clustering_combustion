@@ -153,18 +153,15 @@ def discrete_matshow(data):
     cax = plt.colorbar(mat, ticks=np.arange(np.min(data), np.max(data) + 1))
 
 
-def npc(df_scaled):
+def npc(df_scaled,threshold=0.95):
     n_comp=df_scaled.shape[1]
     pca = PCA(n_components=n_comp)
     pca.fit(df_scaled)
     var_ration = pca.explained_variance_ratio_
-    print(var_ration.sum())
-    for i in range(1,n_comp+1):
-        # print(i,sum(var_ration[0:i]))
-        if (sum(var_ration[0:i]) > 0.95):
-            npc = i
-            break
-    return npc, sum(var_ration[0:i])
+    cumsum=np.cumsum(var_ration)
+    for cnt,i in enumerate(cumsum):
+        if(i>threshold):
+            return(cnt+1,i)
 
 
 # # generate data
