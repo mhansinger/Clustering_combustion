@@ -213,59 +213,30 @@ if __name__ == '__main__':
     # dsc = data_scaling(df, 'PARETO')
     # dsc = df.copy()
 
-    # plot_field(data_name, mesh, df['CH4'])
+    # plot_contour(data_name, mesh, df['T'], mask=df['f_Bilger'] < 0.01)
 
-    plot_contour(data_name, mesh, df['T'], mask=df['f_Bilger'] < 0.01)
-
-
-
-
-    # sub_d = plot_cluster(data_name, mesh, df, dbscan, method='dbscan', mask=df['f_Bilger'] < 0.01)
-    # plot_scatter(df, 'CO', method='dbscan')
-    # plt.scatter(df['label'], df['Chi'], s=0.5)
-    # plt.show()
-
-    # sub_k = plot_cluster(data_name, mesh, dsc, kmeans)
-    # df['label']=dsc['label']
-    # plot_scatter(df, 'CO',method='kmeans')
-    # plt.scatter(df['label'], df['Chi'], s=0.5)
-    # plt.show()
-
-    # a=df['f_Bilger']
-    # test=df[df['f_Bilger']>0.05]
-    # test=df['f_Bilger']>0.05
-    # test_masked = np.ma.masked_where(df['f_Bilger']>0.01,df['f_Bilger'])
-    # plot_contour(data_name,mesh,test_masked)
-
-    # drop = ['ccx', 'ccy', 'ccz', 'label',
-    #         'T', 'Chi', 'PV',
-    #         'f_Bilger', 'non-eq', 'PV_norm', 'Chi_norm', 'PV_compute'
-    #         ]
-    # drop = set(dsc.columns).intersection(drop)
-    #
-    # X = dsc.copy()
-    # X = X.drop(drop, axis=1)
-    # X=X.reset_index(drop=True)
-    # msk=df.reset_index(drop=True)
-    # dm=X[msk['f_Bilger'] > 0.01].copy()
-    #
-    # model = KMeans(n_clusters=20, random_state=42)
-    # # model = hdbscan.HDBSCAN(min_cluster_size=800)
-    # model.fit(dm)
-    # dm['label']=model.labels_
-    # X['label']=dm['label']
-    # X=X.fillna(-2)
-    #
-    # df=df.reset_index(drop=True)
-    # df['label'] = X['label']
-    # n_clusters = len(set(df['label']).difference([-2]))
-    # cmap = plt.get_cmap('jet', n_clusters)
-
-    # model = KMeans(n_clusters=5, random_state=42)
-    model = DBSCAN(eps=0.005, min_samples=200)
-    model = hdbscan.HDBSCAN(min_cluster_size=800)
+    model = KMeans(n_clusters=5, random_state=42)
+    # model = DBSCAN(eps=0.005, min_samples=200)
+    # model = hdbscan.HDBSCAN(min_cluster_size=800)
     df,cmap,cluster = clustering(df,dsc,model)
 
-    plot_contour(data_name, mesh, df['label'], mask=df['f_Bilger'] < 0.01,cmap=cmap)
-    plot_scatter(df, 'T', method='dbscan')
+    # plot_contour(data_name, mesh, df['label'], mask=df['f_Bilger'] < 0.01,cmap=cmap)
+    # plot_scatter(df, 'T', method='dbscan')
+
+
+    drop = ['ccx', 'ccy', 'ccz', 'label',
+            'T', 'Chi', 'PV',
+            'f_Bilger', 'non-eq', 'PV_norm', 'Chi_norm', 'PV_compute'
+            ]
+    drop = set(dsc.columns).intersection(drop)
+    dsc=dsc.drop(drop,axis=1)
+    dsc_s=dsc.sample(frac=0.1)
+    pca= PCA(n_components=3)
+    a=pca.fit_transform(dsc_s)
+
+    from mpl_toolkits.mplot3d import Axes3D
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(a[:,0],a[:,1],a[:,2],c=df.loc[dsc_s.index]['label'])
+    plt.show()
 
